@@ -1,0 +1,13 @@
+# Nixpacks configuration for Railway deployment
+
+[phases.setup]
+nixPkgs = ["bun"]
+
+[phases.install]
+cmds = ["bun install"]
+
+[phases.build]
+cmds = ["bun build src/index.ts --outdir dist --target bun --minify"]
+
+[start]
+cmd = "bun dist/index.js"
