@@ -11,7 +11,12 @@ export const AUTH_RATE_LIMIT_WINDOW_MINUTES = 15;
 export const AUTH_INIT_RATE_LIMIT_ATTEMPTS = 120;
 export const AUTH_INIT_RATE_LIMIT_WINDOW_MINUTES = 15;
 
-export const PASSWORD_RESET_RATE_LIMIT_ATTEMPTS = 3;
+// Shared by /password-reset/{request,verify,confirm} + a couple of low-value
+// endpoints. 10/hour per IP: tight enough to block spam, loose enough that a
+// real user who mistypes their OTP a few times doesn't get locked out — and
+// wide enough for dev iteration. Brute-forcing the OTP itself is separately
+// bounded by MAX_OTP_ATTEMPTS in passwordReset.service.ts.
+export const PASSWORD_RESET_RATE_LIMIT_ATTEMPTS = 10;
 export const PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES = 60;
 
 export const API_RATE_LIMIT_REQUESTS = 100;

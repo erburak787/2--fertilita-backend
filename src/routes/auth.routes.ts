@@ -34,6 +34,17 @@ import {
   verifyPasswordResetSchema,
   confirmPasswordResetSchema,
 } from '../schemas/passwordReset.schema';
+import {
+  requestEmailChange,
+  verifyCurrentEmailOtp,
+  requestNewEmailOtp,
+  confirmEmailChange,
+} from '../services/emailChange.service';
+import {
+  verifyCurrentEmailOtpSchema,
+  requestNewEmailOtpSchema,
+  confirmEmailChangeSchema,
+} from '../schemas/emailChange.schema';
 import { getCollections } from '../db/collections';
 import { getNow } from '../utils/date';
 import { generateId } from '../utils/id';
@@ -248,6 +259,55 @@ me.post('/onboarding/complete', async (c) => {
     return c.json({ success: true });
   } catch (err) { return handle(err, c); }
 });
+
+// ---- Email change (OTP on OLD + NEW address) ----
+// 4-step flow — all share passwordResetRateLimiter (3/hr per IP). See
+// emailChange.service.ts for the state machine.
+me.post('/email/change/request', passwordResetRateLimiter, async (c) => {
+  try {
+    await requestEmailChange({ userId: c.get('userId'), ip: getIpFromContext(c) });
+    return c.json({ success: true });
+  } catch (err) { return handle(err, c); }
+});
+
+me.post(
+  '/email/change/verify-current',
+  passwordResetRateLimiter,
+  zValidator('json', verifyCurrentEmailOtpSchema),
+  async (c) => {
+    try {
+      const result = await verifyCurrentEmailOtp({
+        userId: c.get('userId'),
+        code: c.req.valid('json').code,
+      });
+      return c.json(result);
+    } catch (err) { return handle(err, c); }
+  },
+);
+
+me.post(
+  '/email/change/new',
+  passwordResetRateLimiter,
+  zValidator('json', requestNewEmailOtpSchema),
+  async (c) => {
+    try {
+      await requestNewEmailOtp(c.req.valid('json'));
+      return c.json({ success: true });
+    } catch (err) { return handle(err, c); }
+  },
+);
+
+me.post(
+  '/email/change/confirm',
+  passwordResetRateLimiter,
+  zValidator('json', confirmEmailChangeSchema),
+  async (c) => {
+    try {
+      await confirmEmailChange(c.req.valid('json'));
+      return c.json({ success: true });
+    } catch (err) { return handle(err, c); }
+  },
+);
 
 auth.route('/', me);
 

@@ -45,6 +45,16 @@ export async function requestPasswordReset(params: {
   if (!user || !user.passwordHash) {
     // OAuth-only accounts have no passwordHash → nothing to reset. Return
     // success anyway; do not leak the account state.
+    // Dev-only diagnostic: prod stays silent for enumeration protection,
+    // but dev prints why nothing was sent — otherwise "I didn't get the
+    // email" is impossible to debug from the outside.
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(
+        `[password-reset] No send for "${params.email}": ${
+          !user ? 'no user with that email' : 'user has no passwordHash (OAuth-only account)'
+        }`
+      );
+    }
     return;
   }
 

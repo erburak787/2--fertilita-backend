@@ -112,6 +112,85 @@ export async function sendOpaqueToUser(
   return { sent, failed };
 }
 
+// Wishlist expiry reminder push. Deliberately does NOT route through
+// buildOpaqueNotification: that helper collapses all `kind`s to a single
+// "Time for your reminder." string, but the client wants an explicit
+// countdown here. Copy is still fully opaque — no fertility/cycle/health
+// references — per Fertilita's post-Dobbs constraint.
+function buildAccessEndingBody(locale: AppLocale | undefined, daysLeft: 30 | 15 | 0): string {
+  const l: AppLocale = locale ?? 'en';
+  if (l === 'de') {
+    if (daysLeft === 30) return 'Dein Zugang endet in 30 Tagen.';
+    if (daysLeft === 15) return 'Dein Zugang endet in 15 Tagen.';
+    return 'Dein Zugang endet heute.';
+  }
+  if (daysLeft === 30) return 'Your access ends in 30 days.';
+  if (daysLeft === 15) return 'Your access ends in 15 days.';
+  return 'Your access ends today.';
+}
+
+export async function sendWishlistAccessEndingPush(
+  userId: string,
+  daysLeft: 30 | 15 | 0
+): Promise<{ sent: number; failed: number }> {
+  const tokens = await getActiveTokensForUser(userId);
+  if (tokens.length === 0) return { sent: 0, failed: 0 };
+
+  const locale = await getUserLocale(userId);
+  const title = 'Reminder from Fertilita';
+  const body = buildAccessEndingBody(locale, daysLeft);
+  // Server-side routing tag only; never surfaces in the notification UI.
+  const kind: OpaqueReminderKind = 'reminder_generic';
+
+  const messages: ExpoPushMessage[] = tokens.map((to) => ({
+    to,
+    title,
+    body,
+    sound: 'default',
+    priority: 'high',
+    data: { kind, reason: 'wishlist_expiry', daysLeft },
+  }));
+
+  const chunks = getExpo().chunkPushNotifications(messages);
+  let sent = 0;
+  let failed = 0;
+
+  for (const chunk of chunks) {
+    let tickets: ExpoPushTicket[] = [];
+    try {
+      tickets = await getExpo().sendPushNotificationsAsync(chunk);
+    } catch (err: any) {
+      failed += chunk.length;
+      await logDelivery({
+        userId, kind, status: 'failed',
+        error: err?.message ?? 'expo_push_send_failed',
+      });
+      continue;
+    }
+    for (const ticket of tickets) {
+      if (ticket.status === 'ok') {
+        sent++;
+        await logDelivery({ userId, kind, status: 'sent', ticketId: ticket.id });
+      } else {
+        failed++;
+        await logDelivery({ userId, kind, status: 'failed', error: ticket.message });
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          const badToken = (chunk[tickets.indexOf(ticket)] as ExpoPushMessage).to;
+          const tokenStr = Array.isArray(badToken) ? badToken[0] : badToken;
+          if (tokenStr) {
+            await getCollections().pushTokens.updateMany(
+              { expoPushToken: tokenStr },
+              { $set: { isActive: false, updatedAt: new Date().toISOString() } }
+            );
+          }
+        }
+      }
+    }
+  }
+
+  return { sent, failed };
+}
+
 export async function sendOpaqueBatch(
   userIds: string[],
   kind: OpaqueReminderKind

@@ -45,6 +45,9 @@ export const adminAuditActionSchema = z.enum([
   'trial_extended',
   'push_broadcast',
   'suggestion_updated',
+  'wishlist_email_added',
+  'wishlist_bulk_upload',
+  'wishlist_email_deleted',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 

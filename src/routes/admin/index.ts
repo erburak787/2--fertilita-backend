@@ -7,6 +7,7 @@ import { adminKnowledgeRoutes } from './knowledge.routes';
 import { adminSubscriptionRoutes } from './subscription.routes';
 import { adminSuggestionsRoutes } from './suggestions.routes';
 import { adminAuditRoutes } from './audit.routes';
+import { adminWishlistRoutes } from './wishlist.routes';
 import type { BaseVariables } from '../../types/context';
 
 const admin = new Hono<{ Variables: BaseVariables }>();
@@ -19,5 +20,6 @@ admin.route('/knowledge', adminKnowledgeRoutes);
 admin.route('/users', adminSubscriptionRoutes);
 admin.route('/suggestions', adminSuggestionsRoutes);
 admin.route('/audit-log', adminAuditRoutes);
+admin.route('/wishlist', adminWishlistRoutes);
 
 export { admin as adminRoutes };

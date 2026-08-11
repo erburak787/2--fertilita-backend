@@ -81,6 +81,40 @@ export async function getSubscriberInfo(appUserId: string): Promise<RevenueCatSu
   return response.json() as Promise<RevenueCatSubscriberResponse>;
 }
 
+// Grants a promotional entitlement via RC REST. Used by the wishlist flow
+// to give a free year of `premium` on confirmed redemption.
+// Docs: https://www.revenuecat.com/docs/api-v1#grant-a-promotional-entitlement
+// In mock mode (no API key), no-op — the mobile client will still see the
+// mock subscription state driven by the local SubscriptionProvider.
+export async function grantPromotionalEntitlement(params: {
+  appUserId: string;
+  entitlementId: string;   // e.g. 'premium'
+  duration: 'daily' | 'weekly' | 'monthly' | 'two_month' | 'three_month' | 'six_month' | 'yearly' | 'lifetime';
+}): Promise<void> {
+  if (!isRevenueCatConfigured()) {
+    console.warn(
+      `[RevenueCat] Skipping grantPromotionalEntitlement for ${params.appUserId} — mock mode`
+    );
+    return;
+  }
+  const url =
+    `${REVENUECAT_API_URL}/subscribers/${encodeURIComponent(params.appUserId)}` +
+    `/entitlements/${encodeURIComponent(params.entitlementId)}/promotional`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.REVENUECAT_API_KEY_V1}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ duration: params.duration }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('[RevenueCat] grantPromotionalEntitlement failed:', response.status, error);
+    throw new Error(`RevenueCat grant failed: ${response.status}`);
+  }
+}
+
 export function getActiveEntitlement(
   subscriberInfo: RevenueCatSubscriberResponse
 ): RevenueCatEntitlement | null {

@@ -14,6 +14,7 @@ import { supportRoutes } from './support.routes';
 import { shareRoutes } from './share.routes';
 import { subscriptionRoutes } from './subscription.routes';
 import { suggestionsRoutes } from './suggestions.routes';
+import { wishlistRoutes } from './wishlist.routes';
 import type { BaseVariables } from '../types/context';
 
 const api = new Hono<{ Variables: BaseVariables }>();
@@ -34,5 +35,6 @@ api.route('/support', supportRoutes);
 api.route('/share', shareRoutes);
 api.route('/subscription', subscriptionRoutes);
 api.route('/suggestions', suggestionsRoutes);
+api.route('/wishlist', wishlistRoutes);
 
 export { api as apiRoutes };

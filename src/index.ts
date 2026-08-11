@@ -10,6 +10,7 @@ import { adminRoutes } from './routes/admin';
 import { webhookRoutes } from './routes/webhooks';
 import { wellKnownRoutes } from './routes/well-known.routes';
 import { startNotificationScheduler } from './workers/notificationScheduler';
+import { startWishlistExpiryWorker } from './workers/wishlist-expiry.worker';
 import type { BaseVariables } from './types/context';
 
 const app = new Hono<{ Variables: BaseVariables }>();
@@ -77,6 +78,7 @@ async function initializeDatabase() {
 
 await initializeDatabase();
 startNotificationScheduler();
+startWishlistExpiryWorker();
 
 const port = Number(env.PORT);
 console.log(`Fertilita backend listening on http://0.0.0.0:${port} (${env.NODE_ENV})`);

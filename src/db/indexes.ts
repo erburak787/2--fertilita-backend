@@ -44,6 +44,51 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
   ]);
 
+  // Drop the pre-partial-filter index if it exists. `sparse: true` alone
+  // does NOT skip explicit-null values (it only skips *missing* fields),
+  // and Step 1 of the email-change flow writes `sessionTokenHash: null`.
+  // Result on the 2nd request: E11000 dup key on { sessionTokenHash: null }.
+  try {
+    await db.collection('emailChangeRequests').dropIndex('sessionTokenHash_1');
+  } catch { /* index absent — first-run or already migrated */ }
+
+  await db.collection('emailChangeRequests').createIndexes([
+    { key: { userId: 1, createdAt: -1 } },
+    // Only index docs that actually carry a real session token (post Step-2).
+    // Pending rows with `sessionTokenHash: null` are skipped entirely, so
+    // multiple pending requests per user can coexist without collisions.
+    {
+      key: { sessionTokenHash: 1 },
+      unique: true,
+      partialFilterExpression: { sessionTokenHash: { $type: 'string' } },
+    },
+    // TTL — keep the record until the sessionToken would expire. Older
+    // rows are auto-purged. Set high so even expired-and-untouched rows
+    // clean themselves up.
+    { key: { sessionExpiresAt: 1 }, expireAfterSeconds: 3600 },
+  ]);
+
+  await db.collection('wishlistEmails').createIndexes([
+    { key: { email: 1 }, unique: true },
+    { key: { redeemedAt: 1 } },
+    { key: { expiresAt: 1 } },
+  ]);
+
+  // Same pre-partial-filter cleanup as emailChangeRequests — see comment above.
+  try {
+    await db.collection('wishlistRedemptions').dropIndex('sessionTokenHash_1');
+  } catch { /* index absent — first-run or already migrated */ }
+
+  await db.collection('wishlistRedemptions').createIndexes([
+    { key: { email: 1, createdAt: -1 } },
+    {
+      key: { sessionTokenHash: 1 },
+      unique: true,
+      partialFilterExpression: { sessionTokenHash: { $type: 'string' } },
+    },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ]);
+
   await db.collection('attempts').createIndexes([
     { key: { userId: 1, deletedAt: 1, startDate: -1 } },
     { key: { userId: 1, updatedAt: -1 } },

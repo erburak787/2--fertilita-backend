@@ -7,9 +7,16 @@ const envSchema = z.object({
   PORT: z.string().default('3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  // MongoDB — EU-region cluster (see README §Compliance)
+  // MongoDB — EU-region cluster (see README §Compliance).
+  // MONGODB_REGION is the operator's declared cluster region. It is
+  // programmatically enforced at startup (assertEuRegion in db/index.ts)
+  // because Fertilita stores GDPR Art. 9 special-category data and the
+  // cluster region cannot be inferred from MONGODB_URI alone.
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   MONGODB_DB_NAME: z.string().default('fertilita'),
+  MONGODB_REGION: isProduction
+    ? z.string().min(1, 'MONGODB_REGION is required in production (EU-only, see README §Compliance)')
+    : z.string().optional(),
 
   // JWT (user)
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),

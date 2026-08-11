@@ -130,18 +130,18 @@ CORS_ORIGINS=                    # comma-separated; required in production
 
 ### 1. EU data residency
 
-Set `MONGODB_URI` to a cluster in **Frankfurt / Dublin / Paris** (or another EU region). There is no programmatic enforcement — this is operational. GDPR Art. 9 special-category health data must not cross to non-EU primaries.
+Set `MONGODB_URI` to a cluster in **Frankfurt / Dublin / Paris** (or another EU region). GDPR Art. 9 special-category health data must not cross to non-EU primaries.
 
-### 2. Soft-delete with TTL purge
+Programmatic enforcement: declare the cluster region via `MONGODB_REGION` (e.g. `eu-central-1`, `westeurope`, `europe-west3`). `assertEuRegion()` in `src/db/indexes.ts` runs at connect time — in production the backend refuses to boot on a non-EU region. UK regions are intentionally excluded (post-Brexit adequacy requires a separate DPO review).
 
-Fertility data is **soft-deleted** with `deletedAt: Date`. **Every** user-data collection has a TTL index on `deletedAt` that auto-purges rows after **7 days** (see `src/db/indexes.ts` and `SOFT_DELETE_TTL_DAYS`). This is a Fertilita-specific tightening over the Habit Tracker reference (which keeps soft-deleted user data indefinitely).
+### 2. Account deletion — hard-delete + TTL safety net
 
-`DELETE /api/auth/account` runs:
-1. Soft-delete the user row (sets `deletedAt`)
-2. Cascade hard-delete dependent data (`attempts`, `events`, `journalEntries`, `userSettings`, `pushTokens`, `refreshTokens`, `aiRequestLogs`)
-3. Hard-delete the user row
+`DELETE /api/auth/account` **hard-deletes** all user data immediately (see `deleteAccount` in `src/services/auth.service.ts`). The flow is two-phase for crash-safety:
 
-> ⚠️ **Pre-production action:** Have legal/privacy review this model before launch. Pure hard-delete is the safer default for Art. 9 data; the current model balances UX (undo window) against minimization.
+1. **Mark** `deletedAt` on the user row and every Art. 9 fertility collection (`attempts`, `events`, `journalEntries`, `documents`). These four collections have a TTL index on `deletedAt` with `expireAfterSeconds = SOFT_DELETE_TTL_DAYS × 86400` (see `src/db/indexes.ts`), so if the process crashes mid-deletion, Mongo purges the marked rows within 7 days. **No Art. 9 data can outlive that window.**
+2. **Hard-delete** every user-owned row (fertility + non-fertility) and the user row itself.
+
+Non-fertility collections (`userSettings`, `pushTokens`, `onboardingAnswers`, `notificationLog`, `subscriptions`, etc.) rely on the phase-2 `deleteMany` alone; they do not carry Art. 9 data so the TTL safety net is not required there.
 
 ### 3. Opaque push notifications
 

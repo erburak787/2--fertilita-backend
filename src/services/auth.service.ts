@@ -88,11 +88,35 @@ export async function initAnonymousUser(params: {
   // Returning device? Reuse the row. deletedAt filter matters: if the user
   // deleted their account, /init on the same device should create a fresh
   // one, not resurrect the tombstone.
+  //
+  // isAnonymous filter matters too: if the row was upgraded to a real
+  // account (email/OAuth signup after anon /init) and the client later
+  // signs out, the mobile side SHOULD clear its deviceId — but if it
+  // doesn't (older client, bug, etc.), /init returning that real user by
+  // deviceId would silently re-authenticate them. Which reads as
+  // "sign-out is broken" from the user's perspective. So we only match
+  // anonymous rows; a real user with this deviceId is disassociated below.
   let user = await collections.users.findOne({
     deviceId: params.deviceId,
+    isAnonymous: true,
     deletedAt: { $in: [null, undefined] } as any,
   });
   let isNewUser = false;
+
+  if (!user) {
+    // If a NON-anonymous row exists with this deviceId (i.e. a signed-out
+    // real user still has the deviceId column set), free it so the fresh
+    // anon insert below doesn't collide with the unique sparse index. The
+    // real account survives — user can sign back in with email/password.
+    await collections.users.updateOne(
+      {
+        deviceId: params.deviceId,
+        isAnonymous: false,
+        deletedAt: { $in: [null, undefined] } as any,
+      },
+      { $set: { deviceId: null, updatedAt: now } as any },
+    );
+  }
 
   if (user) {
     await collections.users.updateOne(
@@ -531,21 +555,34 @@ export async function signOutAll(userId: string): Promise<void> {
 }
 
 // ---------- Account deletion ----------
-// Soft-delete the user immediately, cascade-hard-delete all linked data,
-// then hard-delete the user record. The 7-day TTL on `deletedAt` is the
-// safety net in case the cascade is ever interrupted.
+// GDPR Art. 9 account deletion. Two-phase for crash-safety:
+//   (1) Mark deletedAt on user + all Art. 9 fertility collections (attempts,
+//       events, journalEntries, documents). These four have a TTL index on
+//       `deletedAt` (see db/indexes.ts) so if the process dies before the
+//       hard-delete phase completes, Mongo purges the marked rows within
+//       SOFT_DELETE_TTL_DAYS. No Art. 9 data can outlive that window.
+//   (2) Hard-delete every user-owned row (fertility + non-fertility) and
+//       the user row itself.
 
 export async function deleteAccount(userId: string): Promise<void> {
   const { deleteObject } = await import('./objectStorage.service');
   const collections = getCollections();
   const now = new Date();
 
-  await collections.users.updateOne({ _id: userId }, { $set: { deletedAt: now } });
+  // Phase 1: mark. If the process dies here, the TTL safety net triggers.
+  await Promise.all([
+    collections.users.updateOne({ _id: userId }, { $set: { deletedAt: now } }),
+    collections.attempts.updateMany({ userId }, { $set: { deletedAt: now } }),
+    collections.events.updateMany({ userId }, { $set: { deletedAt: now } }),
+    collections.journalEntries.updateMany({ userId }, { $set: { deletedAt: now } }),
+    collections.documents.updateMany({ userId }, { $set: { deletedAt: now } }),
+  ]);
 
   // Purge R2 objects for documents belonging to this user before deleting rows.
   const userDocs = await collections.documents.find({ userId }).toArray();
   await Promise.allSettled(userDocs.map((d) => deleteObject(d.storageKey)));
 
+  // Phase 2: hard-delete.
   await Promise.all([
     collections.attempts.deleteMany({ userId }),
     collections.events.deleteMany({ userId }),

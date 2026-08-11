@@ -2,6 +2,9 @@ import type { Collection } from 'mongodb';
 import { getDb } from './index';
 import type { User, RefreshToken } from '../schemas/user.schema';
 import type { PasswordResetToken } from '../schemas/passwordReset.schema';
+import type { EmailChangeRequest } from '../schemas/emailChange.schema';
+import type { WishlistEmail } from '../schemas/wishlistEmail.schema';
+import type { WishlistRedemption } from '../schemas/wishlistRedemption.schema';
 import type { Attempt } from '../schemas/attempt.schema';
 import type { AppEventDoc } from '../schemas/event.schema';
 import type { JournalEntry } from '../schemas/journal.schema';
@@ -27,6 +30,9 @@ export interface Collections {
   users: Collection<User>;
   refreshTokens: Collection<RefreshToken>;
   passwordResetTokens: Collection<PasswordResetToken>;
+  emailChangeRequests: Collection<EmailChangeRequest>;
+  wishlistEmails: Collection<WishlistEmail>;
+  wishlistRedemptions: Collection<WishlistRedemption>;
   attempts: Collection<Attempt>;
   events: Collection<AppEventDoc>;
   journalEntries: Collection<JournalEntry>;
@@ -60,6 +66,9 @@ export function getCollections(): Collections {
     users: db.collection<User>('users'),
     refreshTokens: db.collection<RefreshToken>('refreshTokens'),
     passwordResetTokens: db.collection<PasswordResetToken>('passwordResetTokens'),
+    emailChangeRequests: db.collection<EmailChangeRequest>('emailChangeRequests'),
+    wishlistEmails: db.collection<WishlistEmail>('wishlistEmails'),
+    wishlistRedemptions: db.collection<WishlistRedemption>('wishlistRedemptions'),
     attempts: db.collection<Attempt>('attempts'),
     events: db.collection<AppEventDoc>('events'),
     journalEntries: db.collection<JournalEntry>('journalEntries'),
